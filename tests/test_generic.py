@@ -465,6 +465,31 @@ def test_read_array_of_nulls(data, expected):
     assert all(type(value) is type(other) for value, other in zip(array, expected))
 
 
+@pytest.mark.parametrize("whitespace", [b"\x00", b"\t", b"\n", b"\f", b"\r", b" "])
+@pytest.mark.parametrize(
+    ("items", "expected"),
+    [
+        ([], []),
+        ([b"1", b"-4.5"], [NumberObject(1), FloatObject(-4.5)]),
+        ([b"null", b"/A"], [NullObject(), NameObject("/A")]),
+        ([b"[1]", b"(text)"], [ArrayObject([NumberObject(1)]), TextStringObject("text")]),
+    ],
+)
+def test_read_array_pdf_whitespace(whitespace, items, expected):
+    """All PDF whitespace characters can separate array elements."""
+    stream = BytesIO(b"[" + whitespace + whitespace.join(items) + whitespace + b"]tail")
+    array = ArrayObject.read_from_stream(stream, ReaderDummy())
+    assert array == expected
+    assert stream.read() == b"tail"
+
+
+def test_read_array_preserves_escaped_and_literal_nul():
+    """NUL within names or strings remains data when it is escaped or literal."""
+    stream = BytesIO(b"[/A#00B (a\x00b)]")
+    array = ArrayObject.read_from_stream(stream, ReaderDummy())
+    assert array == [NameObject("/A\x00B"), ByteStringObject(b"a\x00b")]
+
+
 @pytest.mark.parametrize("data", [b"[nul]", b"[nu", b"[n"])
 def test_read_array_of_nulls__invalid(data):
     with pytest.raises(PdfReadError, match=r"^Could not read Null object$"):
