@@ -39,6 +39,33 @@ from pypdf.generic._font import Font
 from . import RESOURCE_ROOT, SAMPLE_ROOT, get_data_from_url
 
 
+@pytest.mark.parametrize("extraction_mode", ["plain", "layout"])
+def test_extract_text_with_nul_after_font_name(extraction_mode):
+    def extract(whitespace: bytes) -> str:
+        writer = PdfWriter()
+        page = writer.add_blank_page(width=612, height=792)
+        font = DictionaryObject({
+            NameObject("/Type"): NameObject("/Font"),
+            NameObject("/Subtype"): NameObject("/Type1"),
+            NameObject("/BaseFont"): NameObject("/Helvetica"),
+            NameObject("/Encoding"): NameObject("/WinAnsiEncoding"),
+        })
+        page[NameObject("/Resources")] = DictionaryObject({
+            NameObject("/Font"): DictionaryObject({NameObject("/F1"): writer._add_object(font)}),
+        })
+        content = DecodedStreamObject()
+        content.set_data(b"BT /F1" + whitespace + b"12 Tf 72 720 Td (Price: \x80) Tj ET")
+        page[NameObject("/Contents")] = writer._add_object(content)
+        buffer = BytesIO()
+        writer.write(buffer)
+        buffer.seek(0)
+        return PdfReader(buffer).pages[0].extract_text(extraction_mode=extraction_mode)
+
+    expected = extract(b" ")
+    assert expected == "Price: \u20ac"
+    assert extract(b"\x00") == expected
+
+
 @pytest.mark.samples
 @pytest.mark.parametrize("visitor_text", [None, lambda a, b, c, d, e: None], ids=["none", "lambda-none"])  # noqa: ARG005
 def test_multi_language(visitor_text):

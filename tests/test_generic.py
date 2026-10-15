@@ -200,6 +200,25 @@ def test_read_string_from_stream_escape_digit2():
     assert read_string_from_stream(stream) == "hello \x01\x02\x03\x04"
 
 
+@pytest.mark.parametrize("whitespace", [b"\x00", b"\t", b"\n", b"\f", b"\r", b" "])
+def test_name_object_pdf_whitespace(whitespace):
+    stream = BytesIO(b"/Name" + whitespace + b"42")
+    assert NameObject.read_from_stream(stream, None) == "/Name"
+    assert stream.read() == whitespace + b"42"
+
+
+def test_dictionary_name_nul_whitespace():
+    stream = BytesIO(b"<< /Answer\x00 42 /Type /Example\x00 >>")
+    dictionary = DictionaryObject.read_from_stream(stream, None)
+    assert dictionary == {"/Answer": 42, "/Type": "/Example"}
+
+
+def test_name_nul_whitespace_preserves_escaped_and_literal_nul():
+    stream = BytesIO(b"[/A#00B (a\x00b)]")
+    array = ArrayObject.read_from_stream(stream, None)
+    assert array == [NameObject("/A\x00B"), ByteStringObject(b"a\x00b")]
+
+
 def test_name_object(caplog):
     stream = BytesIO(b"x")
     with pytest.raises(PdfReadError) as exc:
